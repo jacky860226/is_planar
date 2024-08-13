@@ -1,0 +1,15 @@
+Language: Cpp
+BasedOnStyle: Google
+AlignAfterOpenBracket: AlwaysBreak
+AlignEscapedNewlines: DontAlign
+AlignOperands: false
+AllowShortFunctionsOnASingleLine: Empty
+AlwaysBreakTemplateDeclarations: true
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+DerivePointerAlignment: false
+FixNamespaceComments: false
+PenaltyBreakBeforeFirstCallParameter: 0
+SpaceAfterCStyleCast: true
+SpaceAfterTemplateKeyword: false
+Standard: Cpp11
+TabWidth: 3
