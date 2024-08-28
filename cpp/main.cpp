@@ -2,40 +2,42 @@
 using namespace std;
 struct FringeOpposedSubset {
   deque<int> left, right;
+  FringeOpposedSubset() = default;
   FringeOpposedSubset(int h) : left{h}, right() {}
 };
+template<typename T>
+void extend(T& a, T& b, bool rev = false) {
+  rev ? a.insert(a.begin(), b.rbegin(), b.rend())
+      : a.insert(a.end(), b.begin(), b.end());
+}
 struct Fringe {
   deque<FringeOpposedSubset> FOPs;
   Fringe(int h) : FOPs{{h}} {}
-  bool operator<(const Fringe& other) const {
-    auto diff = FOPs.back().left.back() - other.FOPs.back().left.back();
-    if (diff != 0) return diff < 0;
-    return FOPs.front().left.front() < other.FOPs.front().left.front();
+  bool operator<(const Fringe& o) const {
+    return std::tie(FOPs.back().left.back(), FOPs.front().left.front()) <
+        std::tie(o.FOPs.back().left.back(), o.FOPs.front().left.front());
   }
-  void merge(Fringe& other) {
-    other.merge_t_alike_edges();
-    merge_t_opposite_edges_into(other);
+  void merge(Fringe& o) {
+    o.merge_t_alike_edges();
+    merge_t_opposite_edges_into(o);
     if (FOPs.front().right.empty())
-      other.align_duplicates(FOPs.back().left.front());
+      o.align_duplicates(FOPs.back().left.front());
     else
-      make_onion_structure(other);
-    if (other.FOPs.front().left.size()) FOPs.push_front(other.FOPs.front());
+      make_onion_structure(o);
+    if (o.FOPs.front().left.size()) FOPs.push_front(o.FOPs.front());
   }
   void merge_t_alike_edges() {
-    if (!FOPs.front().right.empty()) throw runtime_error("Exception");
-    for (auto it = next(FOPs.begin()); it != FOPs.end(); ++it) {
-      if (!it->right.empty()) throw runtime_error("Exception");
-      FOPs.front().left.insert(
-          FOPs.front().left.end(), it->left.begin(), it->left.end());
+    FringeOpposedSubset ans;
+    for (auto& FOP : FOPs) {
+      if (!FOP.right.empty()) throw runtime_error("Exception");
+      extend(ans.left, FOP.left);
     }
-    FOPs = decltype(FOPs){FOPs.front()};
+    FOPs = {ans};
   }
-  void merge_t_opposite_edges_into(Fringe& other) {
+  void merge_t_opposite_edges_into(Fringe& o) {
     while (FOPs.front().right.empty() &&
-           FOPs.front().left.front() > other.FOPs.front().left.back()) {
-      other.FOPs.front().right.insert(
-          other.FOPs.front().right.end(), FOPs.front().left.begin(),
-          FOPs.front().left.end());
+           FOPs.front().left.front() > o.FOPs.front().left.back()) {
+      extend(o.FOPs.front().right, FOPs.front().left);
       FOPs.pop_front();
     }
   }
@@ -52,32 +54,26 @@ struct Fringe {
       swap(FOPs.front().left, FOPs.front().right);
     }
   }
-  void make_onion_structure(Fringe& other) {
+  void make_onion_structure(Fringe& o) {
     auto low = &FOPs.front().left, high = &FOPs.front().right;
     if (FOPs.front().left.front() >= FOPs.front().right.front())
       swap(low, high);
-    if (other.FOPs.front().left.back() < low->front())
+    if (o.FOPs.front().left.back() < low->front())
       throw runtime_error("Exception");
-    if (other.FOPs.front().left.back() < high->front()) {
-      low->insert(
-          low->begin(), other.FOPs.front().left.rbegin(),
-          other.FOPs.front().left.rend());
-      high->insert(
-          high->begin(), other.FOPs.front().right.rbegin(),
-          other.FOPs.front().right.rend());
-      other.FOPs.front().left.clear();
-      other.FOPs.front().right.clear();
+    if (o.FOPs.front().left.back() < high->front()) {
+      extend(*low, o.FOPs.front().left, true);
+      extend(*high, o.FOPs.front().right, true);
+      o.FOPs.front().left.clear();
+      o.FOPs.front().right.clear();
     }
   }
-  auto lr_condition(int dfs_height) const {
-    bool left_condition =
-        !FOPs.front().left.empty() && FOPs.front().left.front() >= dfs_height;
-    bool right_condition =
-        !FOPs.front().right.empty() && FOPs.front().right.front() >= dfs_height;
-    return make_pair(left_condition, right_condition);
+  auto lr_condition(int deep) const {
+    bool L = !FOPs.front().left.empty() && FOPs.front().left.front() >= deep;
+    bool R = !FOPs.front().right.empty() && FOPs.front().right.front() >= deep;
+    return make_pair(L, R);
   }
-  void prune(int dfs_height) {
-    auto [left, right] = lr_condition(dfs_height);
+  void prune(int deep) {
+    auto [left, right] = lr_condition(deep);
     while (!FOPs.empty() && (left || right)) {
       if (left) FOPs.front().left.pop_front();
       if (right) FOPs.front().right.pop_front();
@@ -85,31 +81,30 @@ struct Fringe {
         FOPs.pop_front();
       else
         swap_side();
-      if (!FOPs.empty()) tie(left, right) = lr_condition(dfs_height);
+      if (!FOPs.empty()) tie(left, right) = lr_condition(deep);
     }
   }
 };
 unique_ptr<Fringe> get_merged_fringe(deque<unique_ptr<Fringe>>& upper) {
   if (upper.empty()) return nullptr;
   sort(upper.begin(), upper.end(), [](auto& a, auto& b) { return *a < *b; });
-  auto new_fringe = move(upper[0]);
   for (auto it = next(upper.begin()); it != upper.end(); ++it)
-    new_fringe->merge(**it);
-  return new_fringe;
+    upper.front()->merge(**it);
+  return move(upper.front());
 }
-void merge_fringes(vector<deque<unique_ptr<Fringe>>>& fringes, int dfs_height) {
+void merge_fringes(vector<deque<unique_ptr<Fringe>>>& fringes, int deep) {
   auto mf = get_merged_fringe(fringes.back());
   fringes.pop_back();
   if (mf) {
-    mf->prune(dfs_height);
+    mf->prune(deep);
     if (mf->FOPs.size()) fringes.back().push_back(move(mf));
   }
 }
 struct Edge {
   int from, to;
   Edge(int from, int to) : from(from), to(to) {}
-  bool operator==(const Edge& other) const {
-    return from == other.from && to == other.to;
+  bool operator==(const Edge& o) const {
+    return from == o.from && to == o.to;
   }
 };
 struct Graph {
@@ -134,23 +129,23 @@ struct Graph {
 };
 
 Graph g;
-vector<int> dfs_heights;
+vector<int> Deeps;
 vector<deque<unique_ptr<Fringe>>> fringes;
 
 //*
 bool dfs(int x, int parent = -1) {
   for (int y : g.neighbor[x]) {
     if (y == parent) continue;
-    if (dfs_heights[y] < 0) {  // tree edge
+    if (Deeps[y] < 0) {  // tree edge
       fringes.push_back({});
-      dfs_heights[y] = dfs_heights[x] + 1;
+      Deeps[y] = Deeps[x] + 1;
       if (!dfs(y, x)) return false;
-    } else if (dfs_heights[x] > dfs_heights[y]) {  // back edge
-      fringes.back().push_back(make_unique<Fringe>(dfs_heights[y]));
+    } else if (Deeps[x] > Deeps[y]) {  // back edge
+      fringes.back().push_back(make_unique<Fringe>(Deeps[y]));
     }
   }
   try {
-    if (fringes.size() > 1) merge_fringes(fringes, dfs_heights[parent]);
+    if (fringes.size() > 1) merge_fringes(fringes, Deeps[parent]);
   } catch (const exception& e) {
     return false;
   }
@@ -166,19 +161,19 @@ bool dfs(int root) {
     if (yID == g.neighbor[x].size()) {
       dfs_stack.pop();
       try {
-        if (fringes.size() > 1) merge_fringes(fringes, dfs_heights[parent]);
+        if (fringes.size() > 1) merge_fringes(fringes, Deeps[parent]);
       } catch (const std::exception& e) {
         return false;
       }
     } else {
       auto y = g.neighbor[x][yID];
       if (y == parent) continue;
-      if (dfs_heights[y] < 0) {  // tree edge
+      if (Deeps[y] < 0) {  // tree edge
         fringes.push_back({});
-        dfs_heights[y] = dfs_heights[x] + 1;
+        Deeps[y] = Deeps[x] + 1;
         dfs_stack.push({y, -1, x});
-      } else if (dfs_heights[x] > dfs_heights[y]) {  // back edge
-        fringes.back().push_back(make_unique<Fringe>(dfs_heights[y]));
+      } else if (Deeps[x] > Deeps[y]) {  // back edge
+        fringes.back().push_back(make_unique<Fringe>(Deeps[y]));
       }
     }
   }
@@ -186,10 +181,10 @@ bool dfs(int root) {
 }
 //*/
 bool is_planar() {
-  dfs_heights.assign(g.n, -1);
+  Deeps.assign(g.n, -1);
   for (int i = 0; i < g.n; ++i) {
     fringes.clear();
-    dfs_heights[i] = 0;
+    Deeps[i] = 0;
     if (!dfs(i)) return false;
   }
   return true;
